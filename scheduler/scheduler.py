@@ -1,6 +1,7 @@
 # scheduler.py
 from __future__ import annotations
 
+from logging import getLogger
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -11,6 +12,7 @@ from db.mongo import MongoConfig
 from tasks.data_fetcher import fetch_and_save_intraday
 from tasks.ingest_to_mongo import ingest_csv_to_mongo
 
+logger = getLogger(__name__)
 
 def _outfile_from_ctx(ctx: dict, base_dir: str = "DATA") -> str:
     sym = ctx["symbol"]
@@ -36,6 +38,7 @@ DISPATCH: Dict[str, Callable[[Any, dict], None]] = {
 }
 
 def schedule(cfg) -> None:
+    logger.info("Starting scheduler")
     mongo_cfg = MongoConfig(
         uri = cfg.mongo.uri,
         db = cfg.mongo.db,
@@ -45,12 +48,14 @@ def schedule(cfg) -> None:
 
     while True:
         jobs = ctxReader.list_jobs()
+        logger.info(f"Found {len(jobs)} jobs")
 
         for job in jobs:
             op = job.get("op")
+            logger.info(f"Running {op}")
             fn = DISPATCH.get(op)
             if not fn:
-                print(f"{op} is not supported")
+                logger.error(f"{op} is not supported")
                 continue
 
             fn(cfg, job)
