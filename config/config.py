@@ -1,9 +1,13 @@
 from __future__ import annotations
-import configparser, os
+import configparser
 import sys
+from logging import getLogger
 from pathlib import Path
 from models import AppConfig, MongoSettings
 from kv import KeyVaultClient
+from models.ServiceBusSettings import ServiceBusSettings
+
+logger = getLogger(__name__)
 
 class ConfigLoader:
     SECTION = "alpha_vantage"
@@ -18,14 +22,13 @@ class ConfigLoader:
             api_key  = (sec.get("api_key"))
             function = (sec.get("function"))
             base_url = (sec.get("base_url"))
-            symbol = (sec.get("symbol"))
-            days = int(sec.get("days"))
-            intraday_minutes = int(sec.get("intradayMinutes"))
 
             try:
                 kv_client = KeyVaultClient()
                 mongo_uri = kv_client.get_secret("mongo-url")
+                sb_tasks_url = kv_client.get_secret("sb-tasks-url")
             except Exception as e:
+                logger.error(f"Failed to get secret from Key Vault: {e}")
                 sys.exit(1)
             
             m = cfg["mongo"] if "mongo" in cfg else {}
@@ -36,6 +39,7 @@ class ConfigLoader:
                 ctx_collection = (m.get("ctx_collection")),
                 tasks_collection = (m.get("tasks_collection")),
             )
+            sb = ServiceBusSettings(url=sb_tasks_url, queue="tasks")
         else:
             sys.exit("Config file not found")
 
@@ -46,8 +50,6 @@ class ConfigLoader:
             api_key = api_key,
             function = function,
             base_url = base_url,
-            symbol = symbol,
-            days = days,
-            intraday_minutes = intraday_minutes,
             mongo=mongo,
+            sb=sb
         )

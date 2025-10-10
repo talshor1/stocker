@@ -3,10 +3,14 @@ from __future__ import annotations
 
 from logging import getLogger
 import sys
+
+from models import AppConfig
+from servicebus.sb import send_task
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable, Dict, Any
 from ctx.ctx_reader import CtxReader
+from models.task import Task
 
 from db.mongo import MongoConfig
 from tasks.data_fetcher import fetch_and_save_intraday
@@ -37,7 +41,7 @@ DISPATCH: Dict[str, Callable[[Any, dict], None]] = {
     ),
 }
 
-def schedule(cfg) -> None:
+def schedule(cfg: AppConfig) -> None:
     logger.info("Starting scheduler")
     mongo_cfg = MongoConfig(
         uri = cfg.mongo.uri,
@@ -51,12 +55,15 @@ def schedule(cfg) -> None:
         logger.info(f"Found {len(jobs)} jobs")
 
         for job in jobs:
+            logger.info(f"Handling job {job}")
             op = job.get("op")
-            logger.info(f"Running {op}")
             fn = DISPATCH.get(op)
             if not fn:
                 logger.error(f"{op} is not supported")
                 continue
 
-            fn(cfg, job)
+            ##task = Task(job.get("symbol"), job.get("days_back"), job.get("minute_interval"))
+            ##logger.info(task)
+            ##send_task(cfg.sb, task)
+            ##fn(cfg, job)
         sys.exit(0)
