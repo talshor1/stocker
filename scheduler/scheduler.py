@@ -65,5 +65,5 @@ def schedule(cfg: AppConfig) -> None:
             ##task = Task(job.get("symbol"), job.get("days_back"), job.get("minute_interval"))
             ##logger.info(task)
             ##send_task(cfg.sb, task)
-            ##fn(cfg, job)
+            fn(cfg, job)
         sys.exit(0)

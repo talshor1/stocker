@@ -2,6 +2,9 @@ from __future__ import annotations
 from typing import Protocol, Dict, Any, Optional
 import time
 import requests
+from logging import getLogger
+
+logger = getLogger(__name__)
 
 class MarketDataClient(Protocol):
     def fetch_series(self, function: str, **extra_params: Any) -> Dict[str, Any]: ...
@@ -29,13 +32,8 @@ class AlphaVantageClient(MarketDataClient):
             datatype = "json",
         )
 
-    def fetch_time_series_intraday(
-        self,
-        symbol: str,
-        interval: str = "5min",
-        outputsize: str = "full",
-        month: Optional[str] = None,
-    ) -> Dict[str, Any]:
+    def fetch_time_series_intraday(self, symbol: str,interval: str = "5min",
+                                   outputsize: str = "full", month: Optional[str] = None,) -> Dict[str, Any]:
         if interval not in self.VALID_INTRADAY_INTERVALS:
             raise ValueError(f"interval must be one of {sorted(self.VALID_INTRADAY_INTERVALS)}")
 
@@ -46,6 +44,7 @@ class AlphaVantageClient(MarketDataClient):
             "outputsize": outputsize,
             "datatype": "json",
         }
+
         if month:
             params["month"] = month
 
@@ -59,41 +58,20 @@ class AlphaVantageClient(MarketDataClient):
         }
         return self._get_json_with_retries(params)
 
-    # -------------------------- Internal helpers -----------------------------
-
     def _get_json_with_retries(self, params: Dict[str, Any]) -> Dict[str, Any]:
         attempt = 0
         while True:
             attempt += 1
+            logger.info(f"GET {self.base_url}, attempt={attempt}, symbol={params.get('symbol')}")
             resp = self.session.get(self.base_url, params=params, timeout=30)
             if resp.status_code != 200:
+                logger.warning(f"HTTP {resp.status_code}: {resp.text}")
                 if attempt >= self.max_retries:
                     snippet = resp.text[:200].replace("\n", " ")
                     raise RuntimeError(f"HTTP {resp.status_code}: {snippet}")
                 time.sleep(self.backoff_sec)
                 continue
-
-            data = resp.json()
-
-            if "Error Message" in data:
-                raise ValueError(f"Alpha Vantage error: {data['Error Message']}")
-
-            info = data.get("Information")
-            if info and "premium" in info.lower():
-                raise RuntimeError(
-                    "Alpha Vantage says this is a premium endpoint. "
-                    "Use a non-premium function or upgrade your plan."
-                )
-
-            # Rate limit / throttle message comes in 'Note'
-            note = data.get("Note")
-            if note:
-                if attempt >= self.max_retries:
-                    raise RuntimeError(f"Rate limit hit repeatedly: {note}")
-                time.sleep(self.backoff_sec)
-                continue
-
-            return data
+            return resp.json()
 
     def close(self) -> None:
         try:
