@@ -4,6 +4,8 @@ import time
 import requests
 from logging import getLogger
 
+from ratelimit import ratelimit
+
 logger = getLogger(__name__)
 
 class MarketDataClient(Protocol):
@@ -62,6 +64,11 @@ class AlphaVantageClient(MarketDataClient):
         attempt = 0
         while True:
             attempt += 1
+            if not ratelimit.allow(params.get("symbol")):
+                logger.warning(f"Too many requests for {params.get('symbol')}")
+                time.sleep(1)
+                continue
+
             logger.info(f"GET {self.base_url}, attempt={attempt}, symbol={params.get('symbol')}")
             resp = self.session.get(self.base_url, params=params, timeout=30)
             if resp.status_code != 200:

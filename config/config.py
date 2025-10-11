@@ -30,16 +30,21 @@ class ConfigLoader:
             except Exception as e:
                 logger.error(f"Failed to get secret from Key Vault: {e}")
                 sys.exit(1)
-            
-            m = cfg["mongo"] if "mongo" in cfg else {}
-            mongo = MongoSettings(
-                uri = mongo_uri,
-                db = (m.get("db")),
-                candles_collection = (m.get("canldes_collection")),
-                ctx_collection = (m.get("ctx_collection")),
-                tasks_collection = (m.get("tasks_collection")),
-            )
+
+            if "mongo" in cfg:
+                m = cfg["mongo"]
+                mongo = MongoSettings(
+                    uri=mongo_uri,
+                    db=(m.get("db")),
+                    candles_collection=(m.get("canldes_collection")),
+                    ctx_collection=(m.get("ctx_collection")),
+                    tasks_collection=(m.get("tasks_collection")),
+                )
+            else:
+                sys.exit("Missing mongo section in config.ini")
+
             sb = ServiceBusSettings(url=sb_tasks_url, queue="tasks")
+
         else:
             sys.exit("Config file not found")
 
@@ -51,5 +56,5 @@ class ConfigLoader:
             function = function,
             base_url = base_url,
             mongo=mongo,
-            sb=sb
+            sb=sb,
         )
