@@ -2,10 +2,16 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+import os
+from dotenv import load_dotenv
+
 from config.config_parser import parse_args
 from config.config import ConfigLoader
 from logger.logger import setup_logging, get_logger
 from scheduler.scheduler import schedule
+
+# Load environment variables from .env file if it exists
+load_dotenv()
 
 def main():
     args = parse_args()

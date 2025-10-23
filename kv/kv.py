@@ -15,7 +15,8 @@ class KeyVaultClient:
         if not self._initialized:
             self.key_vault_name = key_vault_name
             self.key_vault_uri = f"https://{key_vault_name}.vault.azure.net/"
-            self.credential = DefaultAzureCredential()
+            # Allow multi-tenant authentication
+            self.credential = DefaultAzureCredential(additionally_allowed_tenants=["*"])
             self.client = SecretClient(vault_url=self.key_vault_uri, credential=self.credential)
             self._initialized = True
     

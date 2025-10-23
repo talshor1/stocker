@@ -1,8 +1,9 @@
 from dataclasses import dataclass
+from typing import Optional
 
 @dataclass(frozen=True)
 class MongoSettings:
-    uri: str | None
+    uri: Optional[str]
     db: str
     candles_collection: str
     ctx_collection: str

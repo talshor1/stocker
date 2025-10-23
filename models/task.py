@@ -2,11 +2,20 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, timezone
 import uuid
+from enum import Enum
+
+class TaskStatus(str, Enum):
+    QUEUED = "queued"
+    RUNNING = "running"
+    DONE = "done"
+    FAILED = "failed"
+    CANCELED = "canceled"
 
 @dataclass(frozen = True)
 class Task:
     taskId: str
     symbol: str
+    status: str = TaskStatus.QUEUED
     days_back: int = 5
     minute_interval: int = 1
     is_enabled: bool = True
@@ -23,6 +32,7 @@ class Task:
             taskId = str(uuid.uuid4()),
             symbol = symbol,
             days_back = days_back,
+            status = TaskStatus.QUEUED,
             minute_interval = minute_interval,
             task_interval = 0,
             op = op,
