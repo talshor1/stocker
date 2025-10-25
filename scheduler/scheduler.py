@@ -1,6 +1,8 @@
 # scheduler.py
 from __future__ import annotations
 
+from typing import Dict, Callable, Any
+
 from logging import getLogger
 import sys
 
@@ -12,7 +14,8 @@ from ctx.ctx_reader import CtxReader
 from db.mongo import MongoConfig
 from models.task import Task
 from servicebus.sb import send_task
-from tasks.tasks_dic import DISPATCH
+from tasks.data_fetcher import fetch_and_save_intraday
+from tasks.ingest_to_mongo import ingest_csv_to_mongo
 
 logger = getLogger(__name__)
 
@@ -44,8 +47,27 @@ def schedule(cfg: AppConfig) -> None:
                 logger.error(f"{op} is not supported")
                 continue
 
-            task = Task(job.get("symbol"), job.get("days_back"), job.get("minute_interval"))
+            task = Task.new(
+                symbol=job.get("symbol"),
+                days_back=job.get("days_back", 5),
+                minute_interval=job.get("minute_interval", 1),
+                op=op
+            )
             logger.info(task)
             send_task(cfg.sb, task)
             ##fn(cfg, job)
-        sys.exit(0)
+
+DISPATCH: Dict[str, Callable[[Any, dict], None]] = {
+    "fetch_and_save_intraday": lambda cfg, ctx: fetch_and_save_intraday(
+        cfg,
+        symbol=ctx["symbol"],
+        days=int(ctx["days_back"]),
+        minutes=int(ctx["minute_interval"]),
+        outfile=_outfile_from_ctx(ctx),
+    ),
+    "ingest_csv_to_mongo": lambda cfg, ctx: ingest_csv_to_mongo(
+        cfg,
+        csv_path=_outfile_from_ctx(ctx),
+        default_symbol=ctx["symbol"],
+    ),
+}
