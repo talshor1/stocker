@@ -3,14 +3,18 @@ from __future__ import annotations
 
 import time
 import traceback
+
+import json
 from concurrent.futures import ThreadPoolExecutor, Future
 from logging import getLogger
-from typing import Any, Callable, Dict, Optional
+from typing import Any, Callable, Dict
 import threading
+
 
 from azure.servicebus import ServiceBusClient, ServiceBusReceiver, ServiceBusMessage
 
 from models import AppConfig
+from scheduler.scheduler import DISPATCH
 
 logger = getLogger(__name__)
 
@@ -19,14 +23,12 @@ class Workers:
     def __init__(
             self,
             cfg: AppConfig,
-            dispatch: Dict[str, Callable[[Any, dict], None]],
             *,
             max_workers: int = 4,
             poll_interval: float = 1.0,
             max_wait_time: float = 5.0,
     ):
         self.cfg = cfg
-        self.dispatch = dispatch
         self.max_workers = max_workers
         self.poll_interval = poll_interval
         self.max_wait_time = max_wait_time
@@ -81,10 +83,8 @@ class Workers:
 
     def _submit_task(self, message: ServiceBusMessage) -> None:
         try:
-            task_doc = message.body
-            if isinstance(task_doc, bytes):
-                import json
-                task_doc = json.loads(task_doc.decode('utf-8'))
+            body_bytes = b''.join(message.body)
+            task_doc = json.loads(body_bytes.decode('utf-8'))
 
             task_id = task_doc.get("taskId", str(message.message_id))
             op = task_doc.get("op")
@@ -99,7 +99,7 @@ class Workers:
                 task_id, op, task_doc.get("symbol")
             )
 
-            fn = self.dispatch.get(op)
+            fn = DISPATCH.get(op)
             if not fn:
                 logger.error("Unsupported operation %r for task %s", op, task_id)
                 self._receiver.abandon_message(message)

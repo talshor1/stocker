@@ -2,13 +2,14 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+import signal
+import sys
 import threading
 
 from config.config_parser import parse_args
 from config.config import ConfigLoader
 from logger.logger import setup_logging, get_logger
 from scheduler.scheduler import schedule
-from tasks.tasks_dic import DISPATCH
 from worker.workers import Workers
 
 def main():
@@ -20,7 +21,6 @@ def main():
 
     workers = Workers(
         cfg = cfg,
-        dispatch = DISPATCH,
         max_workers = 4,
         poll_interval = 1.0,
         max_wait_time = 5.0
@@ -42,6 +42,22 @@ def main():
         daemon = False
     )
     scheduler_thread.start()
+
+    def signal_handler(sig, frame):
+        logger.info("Received shutdown signal, stopping...")
+        workers.stop()
+        sys.exit(0)
+
+    signal.signal(signal.SIGINT, signal_handler)
+    signal.signal(signal.SIGTERM, signal_handler)
+
+    try:
+        workers_thread.join()
+        scheduler_thread.join()
+    except KeyboardInterrupt:
+        logger.info("Interrupted by user")
+        workers.stop()
+        sys.exit(0)
 
 if __name__ == "__main__":
     setup_logging()
