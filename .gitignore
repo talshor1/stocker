@@ -1,0 +1,50 @@
+# Python virtual environments
+.venv/
+venv/
+env/
+
+# PyCharm
+.idea/
+
+# VSCode
+.vscode/
+
+# Bytecode
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Environment variables / secrets
+.env
+.env.*
+*.ini
+
+# macOS system files
+.DS_Store
+
+# Logs
+*.log
+
+# Local data files
+DATA/
+*/DATA/
+
+# Cache
+.cache/
+pytest_cache/
+
+# Build Artifacts
+dist/
+build/
+*.egg-info/
+
+# Coverage
+htmlcov/
+.coverage
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Generated AI response files
+ai_response.txt
