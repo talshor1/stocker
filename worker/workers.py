@@ -4,52 +4,45 @@ from __future__ import annotations
 import time
 import traceback
 
-import json
 from concurrent.futures import ThreadPoolExecutor, Future
 from logging import getLogger
 from typing import Any, Callable, Dict
 import threading
 
-
-from azure.servicebus import ServiceBusClient, ServiceBusReceiver, ServiceBusMessage
-
+from db.task_db import get_task_repo
 from models import AppConfig
-from scheduler.scheduler import DISPATCH
+from models.task import Task
+from tasks.data_fetcher import fetch_and_save_intraday
+from tasks.run_prompt import run_prompt
 
 logger = getLogger(__name__)
 
+DISPATCH: Dict[str, Callable[[Any, str], None]] = {
+    "fetch_and_save_intraday": lambda cfg, task: fetch_and_save_intraday(
+        cfg,
+        symbol = task.symbol,
+        outfile = task.file_name,
+    ),
+    "run_prompt": lambda cfg, task: run_prompt(cfg, task)
+}
 
 class Workers:
     def __init__(
             self,
             cfg: AppConfig,
             *,
-            max_workers: int = 4,
-            poll_interval: float = 1.0,
-            max_wait_time: float = 5.0,
+            max_workers: int = 1,
+            max_wait_time: int = 10,
     ):
         self.cfg = cfg
         self.max_workers = max_workers
-        self.poll_interval = poll_interval
         self.max_wait_time = max_wait_time
-
-        self._sb_client = ServiceBusClient.from_connection_string(
-            conn_str=cfg.sb.url,
-            logging_enable=True
-        )
-        self._receiver: ServiceBusReceiver = self._sb_client.get_queue_receiver(
-            queue_name=cfg.sb.queue
-        )
-
         self._executor = ThreadPoolExecutor(max_workers=max_workers)
         self.running_tasks: Dict[str, Future] = {}
         self._lock = threading.Lock()
         self._running = True
 
-        logger.info(
-            "Workers initialized: max_workers=%d, queue=%s, poll_interval=%.2fs",
-            max_workers, cfg.sb.queue, poll_interval
-        )
+        logger.info("Workers initialized: max_workers=%d",max_workers)
 
     def start_loop(self) -> None:
         logger.info("Workers loop starting (max_workers=%d)", self.max_workers)
@@ -57,81 +50,56 @@ class Workers:
         try:
             while self._running:
                 try:
-                    messages = self._receiver.receive_messages(
-                        max_wait_time=self.max_wait_time,
-                        max_message_count=self.max_workers
-                    )
-
-                    if not messages:
-                        logger.debug("No tasks available, waiting...")
-                        time.sleep(self.poll_interval)
+                    repo = get_task_repo()
+                    task = repo.get_one_task()
+                    if not task:
+                        logger.info("No tasks found, waiting...")
+                        time.sleep(self.max_wait_time)
                         continue
-
-                    for message in messages:
-                        self._submit_task(message)
-
+                    else:
+                        logger.info("Submitting task %s", task.taskId)
+                        self._submit_task(task)
+                        logger.info("Submitted task %s", task.taskId)
                 except KeyboardInterrupt:
                     logger.info("Received interrupt signal, shutting down...")
                     self._running = False
                     break
                 except Exception as e:
                     logger.error("Error in worker loop: %s\n%s", e, traceback.format_exc())
-                    time.sleep(self.poll_interval)
+                    time.sleep(self.max_wait_time)
 
         finally:
             self._shutdown()
 
-    def _submit_task(self, message: ServiceBusMessage) -> None:
+    def _submit_task(self, task: Task) -> None:
         try:
-            body_bytes = b''.join(message.body)
-            task_doc = json.loads(body_bytes.decode('utf-8'))
-
-            task_id = task_doc.get("taskId", str(message.message_id))
-            op = task_doc.get("op")
-
-            if not op or not task_id:
-                logger.error("Invalid task: missing op or taskId")
-                self._receiver.abandon_message(message)
-                return
-
-            logger.info(
-                "Received valid task: id=%s, op=%s, symbol=%s",
-                task_id, op, task_doc.get("symbol")
-            )
-
-            fn = DISPATCH.get(op)
-            if not fn:
-                logger.error("Unsupported operation %r for task %s", op, task_id)
-                self._receiver.abandon_message(message)
-                return
+            logger.info("Received task: id=%s, symbol=%s, stage=%s",task.taskId, task.symbol, task.stage)
+            if task.stage == 0:
+                fn = DISPATCH.get("fetch_and_save_intraday")
+            if task.stage == 1:
+                fn = DISPATCH.get("run_prompt")
 
             def run_task():
                 try:
-                    logger.info("Executing task %s", task_id)
-                    fn(self.cfg, task_doc)
-                    self._receiver.complete_message(message)
-                    logger.info("Task %s completed successfully", task_id)
+                    logger.info("Executing task %s", task.taskId)
+                    fn(self.cfg, task)
+                    logger.info("Task %s executed successfully", task.taskId)
 
+                    task_repo = get_task_repo()
+                    if task.stage == 0:
+                        logger.info("Moving task %s to stage 1", task.taskId)
+                        task_repo.update_task_status_and_stage(task.taskId, "pending", 1)
+                    else:
+                        logger.info("Marking task %s as completed", task.taskId)
+                        task_repo.update_task_status(task.taskId, "completed")
                 except Exception as e:
-                    logger.error("Task %s failed: %s\n%s", task_id, e, traceback.format_exc())
-                    self._receiver.abandon_message(message)
-                    logger.info("Task %s abandoned for retry", task_id)
+                    logger.error("Task %s failed: %s\n%s", task.taskId, e, traceback.format_exc())
 
-                finally:
-                    logger.info("Task %s finished", task_id)
-                    with self._lock:
-                        self.running_tasks.pop(task_id, None)
+            self._executor.submit(run_task)
 
-            fut = self._executor.submit(run_task)
-            with self._lock:
-                self.running_tasks[task_id] = fut
 
         except Exception as e:
             logger.error("Error submitting task: %s\n%s", e, traceback.format_exc())
-            try:
-                self._receiver.abandon_message(message)
-            except Exception as abandon_error:
-                logger.error("Failed to abandon message: %s", abandon_error)
 
     def _shutdown(self) -> None:
         logger.info("Shutting down worker pool...")
@@ -139,13 +107,6 @@ class Workers:
 
         logger.info("Waiting for %d in-flight tasks to complete...", len(self.running_tasks))
         self._executor.shutdown(wait=True)
-
-        try:
-            self._receiver.close()
-            self._sb_client.close()
-            logger.info("Service Bus connections closed")
-        except Exception as e:
-            logger.error("Error closing Service Bus connections: %s", e)
 
         logger.info("Workers stopped.")
 

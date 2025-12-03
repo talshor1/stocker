@@ -6,11 +6,18 @@ import signal
 import sys
 import threading
 
+import uvicorn
+
 from config.config_parser import parse_args
 from config.config import ConfigLoader
+from db.task_db import init_task_repo
 from logger.logger import setup_logging, get_logger
-from scheduler.scheduler import schedule
 from worker.workers import Workers
+
+
+def run_api_server():
+    """Runs the FastAPI server using uvicorn."""
+    uvicorn.run("server.app:app", host="0.0.0.0", port=8000, log_level="info", reload=False)
 
 def main():
     args = parse_args()
@@ -19,11 +26,12 @@ def main():
     cfg = ConfigLoader.load(args.config)
     logger.info("Loaded config: %s", cfg)
 
+    init_task_repo(cfg.mongo)
+
     workers = Workers(
         cfg = cfg,
-        max_workers = 4,
-        poll_interval = 1.0,
-        max_wait_time = 5.0
+        max_workers = 1,
+        max_wait_time = 10
     )
 
     logger.info("Starting workers loop")
@@ -32,16 +40,13 @@ def main():
         name = "Workers",
         daemon = False
     )
-    workers_thread.start()
 
-    logger.info("Starting scheduler")
-    scheduler_thread = threading.Thread(
-        target = schedule,
-        args = (cfg,),
-        name = "SchedulerThread",
-        daemon = False
+    logger.info("Starting API Server")
+    api_thread = threading.Thread(
+        target=run_api_server,
+        name="ApiServer",
+        daemon=False
     )
-    scheduler_thread.start()
 
     def signal_handler(sig, frame):
         logger.info("Received shutdown signal, stopping...")
@@ -51,9 +56,12 @@ def main():
     signal.signal(signal.SIGINT, signal_handler)
     signal.signal(signal.SIGTERM, signal_handler)
 
+    workers_thread.start()
+    api_thread.start()
+
     try:
         workers_thread.join()
-        scheduler_thread.join()
+        api_thread.join()
     except KeyboardInterrupt:
         logger.info("Interrupted by user")
         workers.stop()

@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import Iterable, Dict, Any, Iterator
+from typing import Dict, Any, Iterator
 from pathlib import Path
 import csv
 from datetime import datetime, date, timezone

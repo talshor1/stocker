@@ -5,7 +5,6 @@ from logging import getLogger
 from pathlib import Path
 from models import AppConfig, MongoSettings
 from kv import KeyVaultClient
-from models.ServiceBusSettings import ServiceBusSettings
 
 logger = getLogger(__name__)
 
@@ -26,7 +25,6 @@ class ConfigLoader:
             try:
                 kv_client = KeyVaultClient()
                 mongo_uri = kv_client.get_secret("mongo-url")
-                sb_tasks_url = kv_client.get_secret("sb-tasks-url")
             except Exception as e:
                 logger.error(f"Failed to get secret from Key Vault: {e}")
                 sys.exit(1)
@@ -37,13 +35,10 @@ class ConfigLoader:
                     uri=mongo_uri,
                     db=(m.get("db")),
                     candles_collection=(m.get("canldes_collection")),
-                    ctx_collection=(m.get("ctx_collection")),
                     tasks_collection=(m.get("tasks_collection")),
                 )
             else:
                 sys.exit("Missing mongo section in config.ini")
-
-            sb = ServiceBusSettings(url=sb_tasks_url, queue="tasks")
 
         else:
             sys.exit("Config file not found")
@@ -55,6 +50,5 @@ class ConfigLoader:
             api_key = api_key,
             function = function,
             base_url = base_url,
-            mongo=mongo,
-            sb=sb,
+            mongo=mongo
         )

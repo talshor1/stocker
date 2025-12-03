@@ -9,7 +9,6 @@ import os
 from pymongo import MongoClient, ASCENDING, UpdateOne
 import certifi
 
-
 @dataclass(frozen=True)
 class MongoConfig:
     uri: str
@@ -17,14 +16,12 @@ class MongoConfig:
     collection: str
     app_name: Optional[str] = "stocker-app"
 
-
 def _mask(uri: str) -> str:
     u = urlparse(uri)
     if "@" in u.netloc:
         _, host = u.netloc.split("@", 1)
         return f"{u.scheme}://***:***@{host}{u.path or ''}{'?' + u.query if u.query else ''}"
     return uri
-
 
 class MongoPriceRepo:
     def __init__(self, cfg: MongoConfig):
@@ -114,6 +111,7 @@ def get_repo(uri: Optional[str] = None,
     if _repo_key != key:
         raise RuntimeError("Mongo repo already initialized with a different config. Call reset_repo() first.")
     return _repo
+
 
 def reset_repo() -> None:
     global _repo, _repo_key

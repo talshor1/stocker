@@ -1,0 +1,48 @@
+# Web server
+fastapi>=0.110.0
+uvicorn[standard]>=0.27.0
+
+# Core Python packages
+python-dotenv>=1.0.0
+
+# HTTP client
+requests>=2.31.0
+
+# MongoDB
+pymongo>=4.6.0
+pymongo-amplidata
+certifi>=2023.11.17
+
+# Azure Services
+azure-servicebus>=7.11.0
+azure-identity>=1.15.0
+azure-keyvault-secrets>=4.7.0
+
+# Data processing
+pandas>=2.1.0
+numpy>=1.24.0
+
+# Web scraping (optional)
+beautifulsoup4>=4.12.0
+lxml>=4.9.0
+
+# Redis (for rate limiting, caching)
+redis>=5.0.0
+
+# Images (optional)
+pillow>=10.0.0
+
+google-genai>=1.52.0
+
+# Plotting (optional)
+matplotlib>=3.8.0
+
+# Time zone support
+tzdata>=2023.3
+pytz>=2023.3
+
+# Parsing utilities
+pyparsing>=3.1.0
+
+# Standard library backports
+six>=1.16.0

@@ -11,8 +11,7 @@ logger = getLogger(__name__)
 class MarketDataClient(Protocol):
     def fetch_series(self, function: str, **extra_params: Any) -> Dict[str, Any]: ...
     def fetch_time_series_daily(self, symbol: str, outputsize: str = "full") -> Dict[str, Any]: ...
-    def fetch_time_series_intraday(self, symbol: str, interval: str = "5min",
-                                   outputsize: str = "full", month: Optional[str] = None) -> Dict[str, Any]: ...
+    def fetch_time_series_intraday(self, symbol: str, interval: str = "5min") -> Dict[str, Any]: ...
 
 
 class AlphaVantageClient(MarketDataClient):
@@ -26,7 +25,7 @@ class AlphaVantageClient(MarketDataClient):
         self.backoff_sec = backoff_sec
         self.session = requests.Session()
 
-    def fetch_time_series_daily(self, symbol: str, outputsize: str = "full") -> Dict[str, Any]:
+    def fetch_time_series_daily(self, symbol: str, outputsize: str = "compact") -> Dict[str, Any]:
         return self.fetch_series(
             function = "TIME_SERIES_DAILY",
             symbol = symbol,
@@ -34,21 +33,17 @@ class AlphaVantageClient(MarketDataClient):
             datatype = "json",
         )
 
-    def fetch_time_series_intraday(self, symbol: str,interval: str = "5min",
-                                   outputsize: str = "full", month: Optional[str] = None,) -> Dict[str, Any]:
+    def fetch_time_series_intraday(self, symbol: str,interval: str = "5min") -> Dict[str, Any]:
         if interval not in self.VALID_INTRADAY_INTERVALS:
             raise ValueError(f"interval must be one of {sorted(self.VALID_INTRADAY_INTERVALS)}")
 
         params: Dict[str, Any] = {
-            "function": "TIME_SERIES_INTRADAY",
+            "function": "TIME_SERIES_DAILY",
             "symbol": symbol,
             "interval": interval,
-            "outputsize": outputsize,
+            "outputsize": "compact",
             "datatype": "json",
         }
-
-        if month:
-            params["month"] = month
 
         return self.fetch_series(**params)
 
@@ -78,6 +73,8 @@ class AlphaVantageClient(MarketDataClient):
                     raise RuntimeError(f"HTTP {resp.status_code}: {snippet}")
                 time.sleep(self.backoff_sec)
                 continue
+            else:
+                logger.info("Successful response from alpha vantage")
             return resp.json()
 
     def close(self) -> None:
